@@ -4,9 +4,10 @@ document.body.style.width = "100%";
 document.body.style.height = "100%";
 document.body.style.margin = "0";
 document.body.style.padding = "0";
-
+document.body.style.background = "black";
+document.body.style.color = "white";
 const title = document.createElement("p");
-title.innerText = "Babylon.js NPM Package Template";
+title.innerText = "Image Extrusion and Manipulation using Babylon.js";
 title.style.fontSize = "32pt";
 title.style.textAlign = "center";
 document.body.appendChild(title);

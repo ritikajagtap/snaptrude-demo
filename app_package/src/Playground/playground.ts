@@ -15,14 +15,15 @@ class Playground {
     isMoving = false;
     isVertexEditing = false;
     shapelines: LinesMesh[] = [];
-    spheres: Mesh[] = [];
+    points: Mesh[] = [];
     currentShapePoints: Vector3[] = [];
     dragBox: Nullable<Mesh> = null;
     dragBoxMat: StandardMaterial | null = null;
     currentPickedMesh: AbstractMesh | undefined;
-    fidx: number | undefined;
-    xIndexes: number[] = [];
-    zIndexes: number[] = [];
+    faceID: number | undefined;
+    // x indexes and z indexes vectors
+    xInd: number[] = [];
+    zInd: number[] = [];
 
     // constructor
     constructor(engine: Engine, canvas: HTMLCanvasElement){
@@ -47,10 +48,10 @@ class Playground {
         new AxesViewer(this.scene, 3);
 
         var advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
-        advancedTexture.addControl(this.getDrawButton());
+        advancedTexture.addControl(this.getDrawBtn());
         advancedTexture.addControl(this.getExtrudeButton());
-        advancedTexture.addControl(this.getMoveButton());
-        advancedTexture.addControl(this.getVertexEditButton());
+        advancedTexture.addControl(this.getMoveBtn());
+        advancedTexture.addControl(this.getVertexEditBtn());
 
         // observing the pointer movement 
         this.scene.onPointerObservable.add((pointerInfo) => {
@@ -83,8 +84,8 @@ class Playground {
         var pickingInfo = this.scene.pickWithRay(ray);
 	    // pickedMesh: the mesh corresponding to the picked collision
         if (!!pickingInfo && !!pickingInfo.pickedMesh && pickingInfo.pickedMesh != this.ground) {
-            this.xIndexes = [];
-            this.zIndexes = [];
+            this.xInd = [];
+            this.zInd = [];
 	        // storing to info of pickedmesh in currentPickedMesh
             this.currentPickedMesh = pickingInfo.pickedMesh;
             var wMatrix = pickingInfo.pickedMesh.computeWorldMatrix(true);
@@ -94,19 +95,23 @@ class Playground {
 	        // getting indices of the picked mesh
             var indices = pickingInfo.pickedMesh.getIndices();
 	        //https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/set/box
-	        // Creating a box
+	        // Creating a box 
             this.dragBox = Mesh.CreateBox("dragBox", 0.15, this.scene);
             var vertexPoint = Vector3.Zero();
 	        // faceId: face Index of the picked particle
-            this.fidx = pickingInfo.faceId
+            this.faceID = pickingInfo.faceId
+            // setting the min distance as MAX
             var minDist = Infinity;
             var dist = 0;
             var hitPoint = pickingInfo.pickedPoint;
             var idx = 0;
             var boxPosition = Vector3.Zero();
             if (!indices || !positions || !hitPoint) return;
+
+            // as the user has clicked in vertex edit mode, we are finding which vertex is the nearest to the location of the pointer where the user has clicked
+            
             for (var i = 0; i < 3; i++) {
-                idx = indices[3 * this.fidx + i]
+                idx = indices[3 * this.faceID + i]
                 vertexPoint.x = positions[3 * idx];
                 var initX = positions[3 * idx];
                 vertexPoint.y = positions[3 * idx + 1];
@@ -114,7 +119,9 @@ class Playground {
                 vertexPoint.z = positions[3 * idx + 2];
                 var initZ = positions[3 * idx + 2];
                 Vector3.TransformCoordinatesToRef(vertexPoint, wMatrix, vertexPoint);
+                // finding dist
                 dist = vertexPoint.subtract(hitPoint).length();
+                // if the dist is minimum then updating the variables
                 if (dist < minDist) {
                     boxPosition = vertexPoint.clone();
                     vertexPoint.x = initX;
@@ -122,16 +129,21 @@ class Playground {
                     minDist = dist;
                 }
             } 
+            // by the end of the above loop we have found out which vertex is the user targeting to edit
+
+            // setting the position of dragbox equal to the vertex the user has clicked
             this.dragBox.position = boxPosition;
+
+            // storing the current vertex position in xInd and zInd respectively
             for (var i = 0; i < positions.length; i++) {
                 if (positions[i] == vertexPoint.x) {
-                    this.xIndexes.push(i);
+                    this.xInd.push(i);
                 }
                 if (positions[i] == vertexPoint.z) {
-                    this.zIndexes.push(i);
+                    this.zInd.push(i);
                 }
             }
-
+            // the material is allowed to drag having a visual appearance 
             this.dragBoxMat = new StandardMaterial("dragBoxMat", this.scene);
             this.dragBoxMat.diffuseColor = new Color3(1.4, 3, 0.2);
             this.dragBox.material = this.dragBoxMat;
@@ -206,28 +218,29 @@ class Playground {
                     const pickInfo = this.scene.pick(this.scene.pointerX, this.scene.pointerY);
                     // here .hit returns if the point collided with some object (boolean)
                     // .pickedPoint gives the location of the collision (vector)
+
+                    // we want the points to intersect with the playground as it is 2 D.
                     if (pickInfo && pickInfo.hit && pickInfo.pickedPoint) {
                         // point will be created as the user clicks on left click
-                        var sphere = MeshBuilder.CreateSphere("pointSphere", { diameter: .2, segments: 16 });
+                        var point = MeshBuilder.CreateSphere("pointSphere", { diameter: 0.2, segments: 16 });
                         // we are considering the 2D horizontal plane that's why have have considered x and z axis.
-                        sphere.position.x = pickInfo.pickedPoint.x;
-                        sphere.position.z = pickInfo.pickedPoint.z;
+                        point.position.x = pickInfo.pickedPoint.x;
+                        point.position.z = pickInfo.pickedPoint.z;
                         this.currentShapePoints.push(pickInfo.pickedPoint);
-                        this.spheres.push(sphere);
+                        this.points.push(point);
                     }
                 }else {
                     return;
                 }
             // Right click of Mouse
             } else if (event.button == 2) {
-                
                 if (!this.isDrawing) return;
                 // connecting the points
                 this.drawShape(this.scene);
                 if (!this.shapes) this.shapes = [];
-                // pushing the current shapt in shapes vector
+                // pushing the current shape in shapes vector
                 this.shapes.push(this.currentShapePoints);
-                // declaring currect shapes as NULL
+                // declaring current shapes as NULL
                 this.currentShapePoints = [];
             }
         } else if (this.isVertexEditing) {
@@ -272,7 +285,7 @@ class Playground {
             // getting position
             var current = this.getPosition(false);
             // if faceID is NULL or not equal to 0
-            if (!current || !this.currentPickedMesh || (!this.fidx && this.fidx != 0)) {
+            if (!current || !this.currentPickedMesh || (!this.faceID && this.faceID != 0)) {
                 return;
             }
             // finding the difference
@@ -288,12 +301,12 @@ class Playground {
                 return;
             }
             // updating the positions vector for x cordinates
-            for (var i = 0; i < this.xIndexes.length; i++) {
-                positions[this.xIndexes[i]] = current.x;
+            for (var i = 0; i < this.xInd.length; i++) {
+                positions[this.xInd[i]] = current.x;
             }
             // updating the positions vector for z cordinates
-            for (var i = 0; i < this.zIndexes.length; i++) {
-                positions[this.zIndexes[i]] = current.z;
+            for (var i = 0; i < this.zInd.length; i++) {
+                positions[this.zInd[i]] = current.z;
             }
             // updating the vertices data
             this.currentPickedMesh.updateVerticesData(VertexBuffer.PositionKind, positions);
@@ -310,7 +323,7 @@ class Playground {
     }
 
     // draw button
-    getDrawButton(): Control {
+    getDrawBtn(): Control {
         // creating UI Button
         var drawButton = this.CreateUIButton("drawBtn", "Draw", "left");
         // when the draw button is pressed
@@ -336,7 +349,7 @@ class Playground {
         return drawButton;
     }
     // move button
-    getMoveButton(): Control {
+    getMoveBtn(): Control {
         // creating UI button
         var moveButton = this.CreateUIButton("moveBtn", "Move", "center");
         // if the button is pressed and released 
@@ -365,7 +378,7 @@ class Playground {
     }
 
     // vertext editing
-    getVertexEditButton(): Control {
+    getVertexEditBtn(): Control {
         // creating button for vertext edit
         var vertexEditButton = this.CreateUIButton("vertexEditBtn", "Vertex Edit", "right");
 
@@ -458,14 +471,14 @@ class Playground {
             this.shapelines = [];
         }
         // if speres vector is not empty
-        if (this.spheres && this.spheres.length > 0) {
+        if (this.points && this.points.length > 0) {
             // iterating over the 2D vector
-            for (const sphere of this.spheres) {
+            for (const sphere of this.points) {
                 // disposing
                 sphere.dispose();
             }
             // emptying
-            this.spheres = [];
+            this.points = [];
         }
     }
 
